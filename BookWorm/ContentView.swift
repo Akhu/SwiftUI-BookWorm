@@ -9,72 +9,67 @@ import SwiftUI
 import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.managedObjectContext) private var moc
+    @FetchRequest(entity: Book.entity(), sortDescriptors: [NSSortDescriptor(keyPath: \Book.title, ascending: true), NSSortDescriptor(keyPath: \Book.author, ascending: true)]) var books: FetchedResults<Book>
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
+    @State private var isAddBookSheetShown: Bool = false
 
     var body: some View {
-        List {
-            ForEach(items) { item in
-                Text("Item at \(item.timestamp!, formatter: itemFormatter)")
+        NavigationView {
+            List {
+                ForEach(books, id: \.self){ book in
+                    NavigationLink(destination: DetailView(book: book)) {
+                        EmojiRatingView(rating: book.rating)
+                            .font(.largeTitle)
+                        
+                        VStack(alignment: .leading) {
+                            book.rating != 1 ? Text(book.title ?? "Unknown Title")
+                                .font(.headline) : Text(book.title ?? "Unknown Title")
+                                .font(.headline).foregroundColor(.red)
+                            
+                            
+                            Text(book.author ?? "Unknown Author")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }.onDelete(perform: deleteBooks)
             }
-            .onDelete(perform: deleteItems)
-        }
-        .toolbar {
-            #if os(iOS)
-            EditButton()
-            #endif
+            
+            .navigationTitle(Text("BookWorm"))
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    EditButton()
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        self.isAddBookSheetShown.toggle()
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                }
+                
 
-            Button(action: addItem) {
-                Label("Add Item", systemImage: "plus")
             }
         }
+        .sheet(isPresented: $isAddBookSheetShown, content: {
+            AddBookView().environment(\.managedObjectContext, self.moc)
+        })
+        
     }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+    
+    func deleteBooks(at offsets: IndexSet) {
+        for offset in offsets {
+            let book = books[offset]
+            
+            moc.delete(book)
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
+        
+        try? moc.save()
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        ContentView()
     }
 }
